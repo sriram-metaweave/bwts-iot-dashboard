@@ -60,6 +60,12 @@
               "internal/tech-stack",
               "internal/environment-variables"
             ]
+          },
+          {
+            "group": "AI Agent System",
+            "pages": [
+              "agents/iot-monitoring-architecture"
+            ]
           }
         ]
       }

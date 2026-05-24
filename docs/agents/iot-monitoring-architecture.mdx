@@ -1,0 +1,128 @@
+---
+title: "BWTS IOT Monitoring Architecture"
+description: "Technical specification for the fully automated AI Agent Team managing Alfa Laval PureBallast 3.1 alerts."
+icon: "microchip"
+---
+
+## System Overview
+
+<CardGroup cols={4}>
+  <Card title="07" icon="microchip">
+    Active AI Agents
+  </Card>
+  <Card title="04" icon="network-wired">
+    Parallel Threads
+  </Card>
+  <Card title="02" icon="layer-group">
+    Investigation Phases
+  </Card>
+  <Card title="100%" icon="gears">
+    Automation Level
+  </Card>
+</CardGroup>
+
+**Primary Objective:** Continuous monitoring of BWTS sensor parameters. Automated investigation of threshold breaches, synthesizing historical data, maintenance records, and technical manuals to output structured remediation reports.
+
+---
+
+## Processing Pipeline Schema
+
+The system operates on a zero-touch, event-driven pipeline without polling delays.
+
+<Steps>
+  <Step title="Intake">
+    **Sensor Trigger** → **API / IMAP Gateway** → **Alert Monitor & IOT Manager**
+  </Step>
+  <Step title="Phase 1: Parallel Investigation">
+    Estimated execution time: ~10 minutes.
+    <CardGroup cols={2}>
+      <Card title="Data Analysis" icon="chart-line">Sensor Trends</Card>
+      <Card title="Manual Search" icon="book">Cause Mapping</Card>
+      <Card title="PMS Agent" icon="wrench">Maintenance Data</Card>
+      <Card title="Casefile Agent" icon="folder-open">Incident History</Card>
+    </CardGroup>
+  </Step>
+  <Step title="Data Synthesis">
+    **IOT Manager** evaluates parallel outputs using gate tasks and strict dependency tracking.
+  </Step>
+  <Step title="Phase 2 & Output">
+    **Targeted Remediation Map** → **Final Report Delivery**
+  </Step>
+</Steps>
+
+---
+
+## Agent Subsystem Specifications
+
+### SYS-MGR-01: IOT Manager (Central Coordinator)
+* **Role:** Orchestrates the investigation pipeline and synthesizes all parallel findings.
+* **Process:** Utilizes gate tasks with strict dependency tracking (`blockedByIssueIds`). Triggers Phase 2 upon Phase 1 completion.
+* **Tags:** `TASK_ORCHESTRATION` `DEPENDENCY_TRACKING` `ROOT_CAUSE_SYNTHESIS`
+
+<AccordionGroup>
+  <Accordion title="AGT-MON-01: Alert Monitor" icon="satellite-dish">
+    * **Input:** IMAP (Email) & Dashboard API.
+    * **Process:** Claims, deduplicates, and forwards full alert context parameters.
+    * **Tags:** `API_POLLING` `DEDUPLICATION`
+  </Accordion>
+
+  <Accordion title="AGT-DAT-02: Data Analysis Agent" icon="database">
+    * **Input:** PostgreSQL Time-Series Data.
+    * **Process:** Executes 13 pre-built analytical queries (lamp health, power headroom, anomalies).
+    * **Tags:** `SQL_QUERY` `TREND_ANALYSIS`
+  </Accordion>
+
+  <Accordion title="AGT-MAN-03: Machinery Manual Agent" icon="book-bookmark">
+    * **Input:** 621-page indexed manual & 22 document collections.
+    * **Process:** Phase 1 (Broad cause mapping) & Phase 2 (Extraction of targeted, step-by-step repair procedures).
+    * **Tags:** `KEYWORD_INDEX` `PROCEDURE_EXTRACTION`
+  </Accordion>
+
+  <Accordion title="AGT-PMS-04: PMS Agent" icon="gears">
+    * **Input:** Component Maintenance Database.
+    * **Process:** Calculates component runtime gaps, overdue statuses, and maps to alert variables.
+    * **Tags:** `RUNTIME_PREDICTION` `MAINTENANCE_MAP`
+  </Accordion>
+
+  <Accordion title="AGT-CAS-05: Casefile Agent" icon="folder-tree">
+    * **Input:** Task History & Memory Knowledge Graph.
+    * **Process:** Identifies fleet-wide patterns and historical resolution effectiveness.
+    * **Tags:** `KNOWLEDGE_GRAPH` `PATTERN_RECOGNITION`
+  </Accordion>
+
+  <Accordion title="AGT-RPT-06: Reporting Agent" icon="paper-plane">
+    * **Input:** Synthesized output from IOT Manager.
+    * **Process:** Compiles HTML report with severity coding via `report_builder.py` and transmits via SMTP.
+    * **Tags:** `HTML_GENERATION` `SMTP_TRANSMISSION`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Data Interchange Flow
+
+| Source Node | Target Node | Phase | Transmitted Payload (JSON Schema) |
+| :--- | :--- | :--- | :--- |
+| **Dashboard** | Alert Monitor | `TRIGGER` | Sensor values, threshold variances, inherent severity level. |
+| **Alert Monitor** | IOT Manager | `INTAKE` | Aggregated active alerts, discovery sources, deduplication status flags. |
+| **Sub-Agents** | IOT Manager | `PHASE_01` | Aggregated vectors: Sensor trends, manual cause maps, PMS gaps, historical precedents. |
+| **IOT Manager** | Manual Agent | `PHASE_02` | Confirmed root causes mapped with defined confidence intervals. |
+| **Report Agent**| Engineering | `DELIVERY` | Structured HTML document containing diagnostics, actionable steps, and manual references. |
+
+---
+
+## Classification Matrices
+
+### Root Cause Confidence Intervals
+| Level | Criteria |
+| :--- | :--- |
+| **HIGH** | 3+ independent evidence vectors correlate (e.g., Data Trend + PMS Gap + Manual). |
+| **MEDIUM** | 2 evidence vectors correlate. |
+| **LOW** | Single vector correlation or conflicting data vectors (Requires human audit). |
+
+### Urgency Classifications
+| Status | Criteria |
+| :--- | :--- |
+| **IMMEDIATE** | Compliance breach or safety risk. Action required prior to next operation. |
+| **SHORT-TERM**| Degradation trending. Address at next scheduled port call. |
+| **MONITOR** | Early warning anomaly. Log and observe; no immediate intervention required. |

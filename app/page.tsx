@@ -10,6 +10,7 @@ import ComparativeAnalysis from '@/components/dashboards/ComparativeAnalysis'
 import DataExport from '@/components/dashboards/DataExport'
 import AnalysisTab from '@/components/dashboards/AnalysisTab'
 import AlertsTab from '@/components/dashboards/AlertsTab'
+import AgentInvestigations from '@/components/dashboards/AgentInvestigations'
 import { useDemoMode } from '@/lib/demo-context'
 import DemoControls from '@/components/DemoControls'
 import OperationToggle from '@/components/OperationToggle'
@@ -41,6 +42,7 @@ export default function DashboardPage() {
     { id: 'export', label: t('export') },
     { id: 'analysis', label: t('analysis') },
     { id: 'alerts', label: t('alerts'), badge: alertCount > 0 ? alertCount : undefined },
+    { id: 'agent-log', label: t('agentLog') },
   ]
 
   return (
@@ -130,6 +132,12 @@ export default function DashboardPage() {
       {activeTab === 'alerts' && (
         <div className="pt-20 px-8 pb-8">
           <AlertsTab />
+        </div>
+      )}
+
+      {activeTab === 'agent-log' && (
+        <div className="pt-14">
+          <AgentInvestigations />
         </div>
       )}
     </div>
