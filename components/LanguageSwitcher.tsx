@@ -1,7 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { useTransition, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 
 const LOCALES = [
   { code: 'en', label: 'English',    flag: '🇺🇸' },
@@ -12,8 +11,6 @@ const LOCALES = [
 ]
 
 export default function LanguageSwitcher() {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
   const [currentLocale, setCurrentLocale] = useState('en')
 
   useEffect(() => {
@@ -22,8 +19,11 @@ export default function LanguageSwitcher() {
   }, [])
 
   const handleChange = (locale: string) => {
+    setCurrentLocale(locale)
     document.cookie = `BWTS_LOCALE=${locale}; path=/; max-age=31536000; SameSite=Lax`
-    startTransition(() => router.refresh())
+    // router.refresh() only re-renders server components but doesn't re-hydrate
+    // NextIntlClientProvider with new messages — a full reload is required.
+    window.location.reload()
   }
 
   return (
@@ -31,11 +31,9 @@ export default function LanguageSwitcher() {
       <select
         value={currentLocale}
         onChange={(e) => handleChange(e.target.value)}
-        disabled={isPending}
         className="appearance-none bg-white/80 backdrop-blur-sm border border-slate-200/50 shadow-lg rounded-full
                    pl-4 pr-8 py-2 text-xs font-medium text-slate-700 cursor-pointer
-                   focus:outline-none focus:ring-2 focus:ring-slate-300
-                   disabled:opacity-60 disabled:cursor-wait"
+                   focus:outline-none focus:ring-2 focus:ring-slate-300"
       >
         {LOCALES.map((l) => (
           <option key={l.code} value={l.code}>

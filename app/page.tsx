@@ -54,39 +54,47 @@ export default function DashboardPage() {
     >
       {/* Full-width Navigation Bar */}
       <nav className="fixed top-0 left-0 right-0 z-50 h-14 bg-white/80 backdrop-blur-md border-b border-slate-200/40 shadow-sm">
-        <div className="flex items-center h-full px-4 gap-4">
-          {/* Left spacer — mirrors right controls width to keep tabs visually centred */}
-          <div className="flex-1" />
+        <div className="flex items-center h-full px-4 gap-3">
 
-          {/* Centre: tab pill */}
-          <div className="flex items-center gap-0.5 bg-white/60 backdrop-blur-sm border border-slate-200/50 shadow-md rounded-full px-2 py-1 shrink-0">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'bg-slate-800 text-white shadow-md'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                {tab.label}
-                {tab.badge !== undefined && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            ))}
+          {/* Tab strip — takes all available space, scrolls horizontally if too wide */}
+          <div
+            className="flex-1 min-w-0 overflow-x-auto"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {/* webkit scrollbar hide — inline style can't target pseudo-elements, use a global class */}
+            <style>{`.tab-scroll::-webkit-scrollbar{display:none}`}</style>
+            <div className="tab-scroll flex items-center justify-center">
+              <div className="flex items-center gap-0.5 bg-white/60 backdrop-blur-sm border border-slate-200/50 shadow-md rounded-full px-2 py-1 w-max">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${
+                      activeTab === tab.id
+                        ? 'bg-slate-800 text-white shadow-md'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    {tab.label}
+                    {tab.badge !== undefined && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Right: demo controls + language — flex-1 keeps tabs centred */}
-          <div className="flex-1 flex items-center justify-end gap-2">
+          {/* Right controls — always visible, never pushed off screen */}
+          <div className="flex items-center gap-2 shrink-0">
             <DemoControls />
             <OperationToggle />
             <DemoToggle />
             <LanguageSwitcher />
           </div>
+
         </div>
       </nav>
 
