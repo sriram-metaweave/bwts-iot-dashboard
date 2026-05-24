@@ -180,8 +180,8 @@ function buildHtmlReport(inv: Investigation): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<div style="max-width:620px;margin:32px auto 48px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.09);">
+<body style="margin:0;padding:16px 20px 48px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.09);">
 
   <!-- Red urgency header -->
   <div style="background:#dc2626;padding:24px 28px 20px;">
@@ -245,7 +245,8 @@ function buildHtmlReport(inv: Investigation): string {
     <div style="font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;">
       2 &nbsp;&mdash;&nbsp; Alert Details
     </div>
-    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+    <div style="overflow-x:auto;border:1px solid #e5e7eb;border-radius:8px;">
+    <table style="width:100%;min-width:560px;border-collapse:collapse;">
       <thead>
         <tr style="background:#f9fafb;">
           <th style="text-align:left;padding:8px 14px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #e5e7eb;">Type</th>
@@ -258,6 +259,7 @@ function buildHtmlReport(inv: Investigation): string {
       </thead>
       <tbody>${alertTableRows}</tbody>
     </table>
+    </div>
   </div>
 
   <!-- Section 3: Diagnosis -->
@@ -334,7 +336,7 @@ function ReportDrawer({ inv, onClose }: { inv: Investigation; onClose: () => voi
     <>
       <div className="fixed inset-0 bg-black/25 backdrop-blur-sm z-40" onClick={onClose} />
       <div
-        className="fixed top-0 right-0 h-full w-[700px] max-w-[95vw] bg-white shadow-2xl z-50 flex flex-col"
+        className="fixed top-0 right-0 h-full w-[780px] max-w-[96vw] bg-white shadow-2xl z-50 flex flex-col"
         style={{ animation: 'drawerSlideIn 0.22s ease-out' }}
       >
         <style>{`
