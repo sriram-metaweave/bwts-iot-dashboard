@@ -23,6 +23,7 @@ export interface Investigation {
   casefile_summary: string
   email_subject: string
   email_narrative: string
+  email_html_report: string | null
   email_sent_at: string
   recurrence: Recurrence
   created_at: string

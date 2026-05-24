@@ -46,6 +46,7 @@ interface Investigation {
   casefile_summary: string
   email_subject: string
   email_narrative: string
+  email_html_report: string | null
   email_sent_at: string
   recurrence: Recurrence
   created_at: string
@@ -109,225 +110,16 @@ const PHASE_META: Record<string, { icon: string; color: string }> = {
   report:          { icon: '✉️', color: 'border-slate-200 bg-slate-50' },
 }
 
-// ─── HTML Report Builder (matches actual BWTS-Report style) ──────────────────
-
-function buildHtmlReport(inv: Investigation): string {
-  const critCount = inv.severities?.CRITICAL ?? 0
-  const warnCount = inv.severities?.WARNING  ?? 0
-  const alertSummaryLabel = `${inv.alert_count} Alert${inv.alert_count !== 1 ? 's' : ''} (${critCount} CRITICAL, ${warnCount} WARNING)`
-  const recurrenceText = inv.recurrence?.is_recurring
-    ? ` &mdash; ${inv.recurrence.count === 3 ? 'Third' : inv.recurrence.count === 2 ? 'Second' : `#${inv.recurrence.count}`} Recurrence`
-    : ''
-  const urgencyLabel = inv.urgency === 'IMMEDIATE' ? 'IMMEDIATE ACTION REQUIRED' : inv.urgency
-
-  const priorIds = inv.recurrence?.prior_investigation_ids ?? []
-  const recurrenceBanner = inv.recurrence?.is_recurring && priorIds.length > 0
-    ? `<div style="background:#7f1d1d;padding:14px 28px;border-bottom:2px solid #dc2626;">
-        <div style="color:#fecaca;font-size:12px;font-weight:700;letter-spacing:0.06em;">
-          &#9888; ${inv.recurrence.count === 3 ? 'THIRD' : 'REPEATED'} RECURRENCE &mdash;
-          ${inv.recurrence.count === 3 ? 'THIRD' : 'REPEATED'} recurrence of identical alert pattern
-          (${priorIds.join(' &rarr; ')} &rarr; ${inv.investigation_id}) with zero remediation. ${priorIds.length} prior report${priorIds.length > 1 ? 's' : ''} delivered.
-        </div>
-      </div>`
-    : ''
-
-  const alertTableRows = (inv.alerts_detail ?? []).map(a => {
-    const devPos = a.deviation_pct > 0
-    const sevBg    = a.severity === 'CRITICAL' ? '#fef2f2' : '#fffbeb'
-    const sevColor = a.severity === 'CRITICAL' ? '#dc2626' : '#d97706'
-    const sevBorder = a.severity === 'CRITICAL' ? '#fecaca' : '#fde68a'
-    return `<tr>
-      <td style="padding:9px 14px;background:#f9fafb;color:#6b7280;font-size:12px;border-bottom:1px solid #e5e7eb;">${a.alert_type}</td>
-      <td style="padding:9px 14px;color:#111827;font-size:13px;border-bottom:1px solid #e5e7eb;">${a.parameter}</td>
-      <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;">
-        <span style="background:${sevBg};color:${sevColor};border:1px solid ${sevBorder};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">${a.severity}</span>
-      </td>
-      <td style="padding:9px 14px;color:#111827;font-weight:600;font-size:13px;border-bottom:1px solid #e5e7eb;">${a.current_value} ${a.unit}</td>
-      <td style="padding:9px 14px;color:#6b7280;font-size:13px;border-bottom:1px solid #e5e7eb;">${a.threshold_value} ${a.unit}</td>
-      <td style="padding:9px 14px;color:${devPos ? '#059669' : '#dc2626'};font-weight:700;font-size:13px;border-bottom:1px solid #e5e7eb;">${devPos ? '+' : ''}${a.deviation_pct}%</td>
-    </tr>`
-  }).join('')
-
-  const causeRows = (inv.confirmed_causes ?? []).map((c, i) => {
-    const conf = c.confidence?.toUpperCase()
-    const confBg    = conf === 'HIGH' ? '#fef2f2' : '#fffbeb'
-    const confColor = conf === 'HIGH' ? '#dc2626' : '#d97706'
-    const confBorder = conf === 'HIGH' ? '#fecaca' : '#fde68a'
-    const urgBg    = '#fef2f2'
-    const urgColor = '#dc2626'
-    const urgBorder = '#fecaca'
-    return `<tr>
-      <td style="padding:8px;color:#92400e;font-weight:700;font-size:12px;border-bottom:1px solid #fde68a;width:30px;vertical-align:top;">#${i + 1}</td>
-      <td style="padding:8px;color:#374151;font-size:13px;border-bottom:1px solid #fde68a;">
-        <strong>${c.cause}</strong>
-        &nbsp;<span style="background:${urgBg};color:${urgColor};border:1px solid ${urgBorder};padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;">${inv.urgency}</span>
-        &nbsp;<span style="color:#6b7280;font-size:11px;">(${c.confidence} confidence)</span>
-        &nbsp;<span style="background:${confBg};color:${confColor};border:1px solid ${confBorder};padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;">${conf}</span>
-        <br><span style="color:#6b7280;font-size:12px;line-height:1.5;">${c.evidence_summary}</span>
-      </td>
-    </tr>`
-  }).join('')
-
-  const remediationItems = (inv.remediation_summary ?? '')
-    .split(/\.\s+/)
-    .filter(s => s.trim().length > 5)
-    .map(s => `<li style="margin:0 0 10px;color:#374151;font-size:13px;line-height:1.5;">${s.trim()}${s.endsWith('.') ? '' : '.'}</li>`)
-    .join('')
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body style="margin:0;padding:16px 20px 48px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<div style="max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.09);">
-
-  <!-- Red urgency header -->
-  <div style="background:#dc2626;padding:24px 28px 20px;">
-    <div style="color:#ffffff;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;opacity:0.7;">
-      BWTS Alert Report &middot; ${inv.vessel_name}
-    </div>
-    <div style="color:#ffffff;font-size:22px;font-weight:700;margin-top:6px;line-height:1.3;">
-      ${urgencyLabel}
-    </div>
-    <div style="color:#ffffff;font-size:14px;font-weight:600;margin-top:4px;opacity:0.95;">
-      ${alertSummaryLabel}${recurrenceText}
-    </div>
-    <div style="color:#ffffff;opacity:0.8;font-size:12px;margin-top:5px;">
-      Detected: ${formatDateShort(inv.started_at)} ${formatTime(inv.started_at)} &nbsp;&bull;&nbsp; Report generated: ${formatDateShort(inv.email_sent_at || inv.completed_at)} ${formatTime(inv.email_sent_at || inv.completed_at)}
-    </div>
-  </div>
-
-  ${recurrenceBanner}
-
-  <!-- Section 1: Alert Summary -->
-  <div style="padding:24px 28px 0;">
-    <div style="font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;">
-      1 &nbsp;&mdash;&nbsp; Alert Summary
-    </div>
-    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-      <tr>
-        <td style="width:38%;padding:9px 14px;background:#f9fafb;color:#6b7280;font-size:12px;border-bottom:1px solid #e5e7eb;">Vessel</td>
-        <td style="padding:9px 14px;color:#111827;font-weight:600;font-size:13px;border-bottom:1px solid #e5e7eb;">${inv.vessel_name}</td>
-      </tr>
-      <tr>
-        <td style="padding:9px 14px;background:#f9fafb;color:#6b7280;font-size:12px;border-bottom:1px solid #e5e7eb;">Alert IDs</td>
-        <td style="padding:9px 14px;color:#111827;font-weight:600;font-size:13px;border-bottom:1px solid #e5e7eb;">${(inv.alert_ids ?? []).join(', ')}</td>
-      </tr>
-      <tr>
-        <td style="padding:9px 14px;background:#f9fafb;color:#6b7280;font-size:12px;border-bottom:1px solid #e5e7eb;">Severity Breakdown</td>
-        <td style="padding:9px 14px;border-bottom:1px solid #e5e7eb;">
-          <span style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">${critCount} CRITICAL</span>
-          &nbsp;
-          <span style="background:#fffbeb;color:#d97706;border:1px solid #fde68a;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">${warnCount} WARNING</span>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:9px 14px;background:#f9fafb;color:#6b7280;font-size:12px;border-bottom:1px solid #e5e7eb;">Detection Time</td>
-        <td style="padding:9px 14px;color:#374151;font-size:13px;border-bottom:1px solid #e5e7eb;">${formatDateShort(inv.started_at)} ${formatTime(inv.started_at)}</td>
-      </tr>
-      <tr>
-        <td style="padding:9px 14px;background:#f9fafb;color:#6b7280;font-size:12px;border-bottom:1px solid #e5e7eb;">Investigation Duration</td>
-        <td style="padding:9px 14px;color:#374151;font-size:13px;border-bottom:1px solid #e5e7eb;">${formatDuration(inv.duration_seconds)}</td>
-      </tr>
-      <tr>
-        <td style="padding:9px 14px;background:#f9fafb;color:#6b7280;font-size:12px;">Overall Urgency</td>
-        <td style="padding:9px 14px;">
-          <span style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">${inv.urgency}</span>
-        </td>
-      </tr>
-    </table>
-  </div>
-
-  <!-- Section 2: Alert Details Table -->
-  <div style="padding:22px 28px 0;">
-    <div style="font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;">
-      2 &nbsp;&mdash;&nbsp; Alert Details
-    </div>
-    <div style="overflow-x:auto;border:1px solid #e5e7eb;border-radius:8px;">
-    <table style="width:100%;min-width:560px;border-collapse:collapse;">
-      <thead>
-        <tr style="background:#f9fafb;">
-          <th style="text-align:left;padding:8px 14px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #e5e7eb;">Type</th>
-          <th style="text-align:left;padding:8px 14px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #e5e7eb;">Parameter</th>
-          <th style="text-align:left;padding:8px 14px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #e5e7eb;">Severity</th>
-          <th style="text-align:left;padding:8px 14px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #e5e7eb;">Current</th>
-          <th style="text-align:left;padding:8px 14px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #e5e7eb;">Threshold</th>
-          <th style="text-align:left;padding:8px 14px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #e5e7eb;">Deviation</th>
-        </tr>
-      </thead>
-      <tbody>${alertTableRows}</tbody>
-    </table>
-    </div>
-  </div>
-
-  <!-- Section 3: Diagnosis -->
-  <div style="padding:22px 28px 0;">
-    <div style="font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;">
-      3 &nbsp;&mdash;&nbsp; Diagnosis
-    </div>
-
-    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px 18px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Confirmed Root Causes</div>
-      <table style="width:100%;border-collapse:collapse;">
-        ${causeRows}
-      </table>
-    </div>
-
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 18px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Synthesis</div>
-      <p style="margin:0;color:#374151;font-size:13px;line-height:1.7;">${inv.synthesis_summary ?? '—'}</p>
-    </div>
-
-    ${inv.casefile_summary ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px 18px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Past Incidents &amp; Recurrence Pattern</div>
-      <p style="margin:0;color:#374151;font-size:13px;line-height:1.7;">${inv.casefile_summary}</p>
-      ${priorIds.length ? `<p style="margin:8px 0 0;color:#7f1d1d;font-size:12px;font-weight:600;">Prior investigations: ${priorIds.join(' → ')}</p>` : ''}
-    </div>` : ''}
-  </div>
-
-  <!-- Section 4: Recommended Actions -->
-  <div style="padding:22px 28px 0;">
-    <div style="font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;">
-      4 &nbsp;&mdash;&nbsp; Recommended Actions
-    </div>
-    <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-      <div style="background:#fef2f2;padding:11px 16px;border-bottom:1px solid #fecaca;">
-        <span style="font-size:11px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:0.07em;">
-          ${inv.urgency} &mdash; act before next ballasting operation
-        </span>
-      </div>
-      <div style="padding:14px 16px 8px;">
-        <ul style="margin:0;padding:0;list-style:none;">
-          ${remediationItems || `<li style="margin:0 0 10px;color:#374151;font-size:13px;line-height:1.5;">${inv.remediation_summary}</li>`}
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <div style="margin:22px 28px 0;padding:14px 0 24px;border-top:1px solid #f1f5f9;">
-    <div style="color:#94a3b8;font-size:11px;">Generated by BWTS Agent Team &middot; ${formatDateShort(inv.email_sent_at || inv.completed_at)} ${formatTime(inv.email_sent_at || inv.completed_at)}</div>
-    <div style="color:#94a3b8;font-size:11px;margin-top:3px;">Reference: Alfa Laval PureBallast 3.1 System Manual &middot; ${inv.vessel_name}</div>
-    <div style="color:#94a3b8;font-size:11px;margin-top:3px;">Alert IDs: ${(inv.alert_ids ?? []).join(', ')} &middot; Investigation: ${inv.investigation_id}</div>
-  </div>
-</div>
-</body>
-</html>`
-}
-
-// ─── Report Drawer (blob URL memoized — no scroll reset on re-render) ─────────
+// ─── Report Drawer — renders the exact HTML stored in email_html_report ────────
 
 function ReportDrawer({ inv, onClose }: { inv: Investigation; onClose: () => void }) {
-  // Memoize the HTML string so it doesn't regenerate on every parent re-render
-  const html = useMemo(() => buildHtmlReport(inv), [inv.investigation_id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Memoize the blob URL — changing it would reload the iframe and reset scroll
+  // Use the stored HTML verbatim; memoize so the blob URL never changes on re-render
+  // (changing src would reload the iframe and reset scroll position)
   const url = useMemo(() => {
+    const html = inv.email_html_report ?? '<p style="font-family:sans-serif;padding:32px;color:#64748b">No report stored for this investigation.</p>'
     const blob = new Blob([html], { type: 'text/html' })
     return URL.createObjectURL(blob)
-  }, [html])
+  }, [inv.email_html_report]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Revoke blob URL only when drawer unmounts
   useEffect(() => () => URL.revokeObjectURL(url), [url])
