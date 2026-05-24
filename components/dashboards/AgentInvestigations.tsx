@@ -167,6 +167,175 @@ function ReportDrawer({ inv, onClose }: { inv: Investigation; onClose: () => voi
   )
 }
 
+// ─── Email Drawer — email client view of the sent message ────────────────────
+
+function EmailDrawer({ inv, onClose, onOpenReport }: {
+  inv: Investigation
+  onClose: () => void
+  onOpenReport: () => void
+}) {
+  // Parse plain-text body into paragraphs (split on blank lines)
+  const paragraphs = useMemo(() => {
+    if (!inv.email_narrative) return []
+    return inv.email_narrative
+      .split(/\n{2,}/)
+      .map(p => p.trim())
+      .filter(Boolean)
+  }, [inv.email_narrative])
+
+  const isImmediate = inv.urgency?.toUpperCase() === 'IMMEDIATE'
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/25 backdrop-blur-sm z-40" onClick={onClose} />
+      <div
+        className="fixed top-0 right-0 h-full w-[680px] max-w-[96vw] bg-white shadow-2xl z-50 flex flex-col"
+        style={{ animation: 'drawerSlideIn 0.22s ease-out' }}
+      >
+        {/* ── Email client chrome header ─────────────────────── */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-none">Email Sent</p>
+              <p className="text-xs font-semibold text-slate-700 mt-0.5">{inv.investigation_id} &nbsp;·&nbsp; {inv.vessel_name}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-800 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* ── Scrollable email body ──────────────────────────── */}
+        <div className="flex-1 overflow-y-auto bg-slate-50">
+
+          {/* Subject + meta header */}
+          <div className="bg-white border-b border-slate-100 px-6 pt-5 pb-4">
+            {/* Urgency tag */}
+            {isImmediate && (
+              <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-red-600 text-white mb-3 tracking-wide">
+                IMMEDIATE
+              </span>
+            )}
+
+            {/* Subject */}
+            <h2 className="text-[15px] font-semibold text-slate-900 leading-snug mb-4">
+              {inv.email_subject}
+            </h2>
+
+            {/* From / To / Date metadata rows */}
+            <div className="space-y-1.5 text-[12px]">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400 font-medium w-8 shrink-0">From</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0">B</div>
+                  <span className="text-slate-700 font-medium">BWTS Agent System</span>
+                  <span className="text-slate-400">&lt;bwts-agent@metaweave.in&gt;</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400 font-medium w-8 shrink-0">To</span>
+                <span className="text-slate-600">Technical Superintendent &nbsp;·&nbsp; {inv.vessel_name}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400 font-medium w-8 shrink-0">Date</span>
+                <span className="text-slate-600">{formatDateShort(inv.email_sent_at)} &nbsp;·&nbsp; {formatTime(inv.email_sent_at)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Email body — rendered as paragraphs, not <pre> */}
+          <div className="bg-white mx-4 mt-4 rounded-xl border border-slate-100 shadow-sm px-7 py-6">
+            <div className="text-[13.5px] text-slate-700 leading-relaxed space-y-4 font-[system-ui]">
+              {paragraphs.map((para, i) => {
+                // Numbered list items (e.g. "1. Replace all...")
+                if (/^\d+\.\s/.test(para)) {
+                  const lines = para.split('\n').filter(Boolean)
+                  return (
+                    <ol key={i} className="list-decimal list-inside space-y-1 pl-1">
+                      {lines.map((line, j) => (
+                        <li key={j} className="text-slate-700">{line.replace(/^\d+\.\s*/, '')}</li>
+                      ))}
+                    </ol>
+                  )
+                }
+                // Bullet items
+                if (/^[-•]\s/.test(para)) {
+                  const lines = para.split('\n').filter(Boolean)
+                  return (
+                    <ul key={i} className="list-disc list-inside space-y-1 pl-1">
+                      {lines.map((line, j) => (
+                        <li key={j} className="text-slate-700">{line.replace(/^[-•]\s*/, '')}</li>
+                      ))}
+                    </ul>
+                  )
+                }
+                // All-caps section headers (e.g. "SEVERITY: CRITICAL")
+                if (/^[A-Z][A-Z\s:()]+$/.test(para.split('\n')[0])) {
+                  return (
+                    <p key={i} className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pt-1">
+                      {para}
+                    </p>
+                  )
+                }
+                // Signature / sign-off (starts with "Best regards" etc.)
+                if (/^(best regards|regards|sincerely|yours)/i.test(para)) {
+                  return (
+                    <div key={i} className="pt-3 border-t border-slate-100 text-slate-500 text-[12.5px] whitespace-pre-line">
+                      {para}
+                    </div>
+                  )
+                }
+                // Regular paragraph
+                return <p key={i} className="whitespace-pre-line">{para}</p>
+              })}
+            </div>
+          </div>
+
+          {/* Attachment section */}
+          {inv.email_html_report && (
+            <div className="mx-4 mt-4 mb-6">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-1">
+                Attachment
+              </p>
+              <button
+                onClick={() => { onClose(); onOpenReport() }}
+                className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all shadow-sm group w-full text-left"
+              >
+                <div className="w-10 h-12 rounded-lg bg-red-500 flex flex-col items-center justify-center shrink-0 shadow-sm">
+                  <span className="text-white text-[8px] font-black tracking-wide">HTML</span>
+                  <div className="w-6 h-px bg-white/40 mt-1" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-slate-700 group-hover:text-slate-900 truncate">
+                    Diagnostic Report — {inv.investigation_id}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {inv.investigation_id}.html &nbsp;·&nbsp; {Math.round((inv.email_html_report.length / 1024))} KB
+                  </p>
+                </div>
+                <svg className="w-4 h-4 text-slate-300 group-hover:text-slate-500 shrink-0 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── Phase Card ───────────────────────────────────────────────────────────────
 
 function PhaseCard({ phase, isParallel }: { phase: AgentPhase; isParallel: boolean }) {
@@ -300,6 +469,7 @@ function InvestigationCard({ inv }: { inv: Investigation }) {
   const [phases, setPhases]               = useState<AgentPhase[] | null>(null)
   const [phasesLoading, setPhasesLoading] = useState(false)
   const [reportOpen, setReportOpen]       = useState(false)
+  const [emailOpen, setEmailOpen]         = useState(false)
 
   const critCount  = inv.severities?.CRITICAL ?? 0
   const warnCount  = inv.severities?.WARNING  ?? 0
@@ -322,6 +492,7 @@ function InvestigationCard({ inv }: { inv: Investigation }) {
   return (
     <>
       {reportOpen && <ReportDrawer inv={inv} onClose={() => setReportOpen(false)} />}
+      {emailOpen  && <EmailDrawer  inv={inv} onClose={() => setEmailOpen(false)} onOpenReport={() => { setEmailOpen(false); setReportOpen(true) }} />}
 
       <div className={`rounded-2xl border ${isImmediate ? 'border-red-100' : 'border-slate-200'} bg-white/70 shadow-sm overflow-hidden hover:shadow-md transition-shadow`}>
 
@@ -476,34 +647,46 @@ function InvestigationCard({ inv }: { inv: Investigation }) {
                     )}
                   </div>
 
-                  {/* Attachment chip */}
-                  <button
-                    onClick={() => setReportOpen(true)}
-                    className="shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all group shadow-sm"
-                  >
-                    <div className="w-9 h-11 rounded-md bg-red-500 flex flex-col items-center justify-center shrink-0 shadow-sm">
-                      <span className="text-white text-[8px] font-black tracking-wide">HTML</span>
-                      <div className="w-5 h-px bg-white/40 mt-1" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-[12px] font-semibold text-slate-700 group-hover:text-slate-900">Diagnostic Report</p>
-                      <p className="text-[10px] text-slate-400">{inv.investigation_id}.html · click to view</p>
-                    </div>
-                    <svg className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 ml-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
+                  {/* Chips row — Email + HTML Report */}
+                  <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+                    {/* Email chip */}
+                    <button
+                      onClick={() => setEmailOpen(true)}
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all group shadow-sm"
+                    >
+                      <div className="w-9 h-11 rounded-md bg-blue-500 flex flex-col items-center justify-center shrink-0 shadow-sm">
+                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[12px] font-semibold text-slate-700 group-hover:text-slate-900">Email Sent</p>
+                        <p className="text-[10px] text-slate-400">click to view</p>
+                      </div>
+                      <svg className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 ml-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
 
-                {/* Email body */}
-                {inv.email_narrative && (
-                  <div className="border-t border-slate-100 pt-3">
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Email Message</p>
-                    <pre className="text-[11px] text-slate-600 whitespace-pre-wrap leading-relaxed font-sans max-h-48 overflow-y-auto bg-slate-50 rounded-lg p-3 border border-slate-100">
-                      {inv.email_narrative}
-                    </pre>
+                    {/* HTML Report chip */}
+                    <button
+                      onClick={() => setReportOpen(true)}
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all group shadow-sm"
+                    >
+                      <div className="w-9 h-11 rounded-md bg-red-500 flex flex-col items-center justify-center shrink-0 shadow-sm">
+                        <span className="text-white text-[8px] font-black tracking-wide">HTML</span>
+                        <div className="w-5 h-px bg-white/40 mt-1" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[12px] font-semibold text-slate-700 group-hover:text-slate-900">Diagnostic Report</p>
+                        <p className="text-[10px] text-slate-400">{inv.investigation_id}.html · click to view</p>
+                      </div>
+                      <svg className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 ml-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
                   </div>
-                )}
+                </div>
               </div>
             </Section>
 
