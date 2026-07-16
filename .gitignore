@@ -20,3 +20,4 @@ tsconfig.tsbuildinfo
 *.log
 npm-debug.log*
 .vercel
+_backups/

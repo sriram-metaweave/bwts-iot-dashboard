@@ -48,6 +48,13 @@ POSTGRES_PASSWORD=<db-password>
 POSTGRES_DB=metaweave
 CLOUD_SQL_INSTANCE_CONNECTION_NAME=lifeosai-481608:asia-south1:lifeosai-db
 GOOGLE_SERVICE_ACCOUNT_BASE64=<base64-encoded GCP service account JSON>
+
+# Email alerts (Gmail SMTP) — see "Alert Email Safety Switch" below
+ALERT_FROM_EMAIL=<sender gmail address>
+ALERT_FROM_PASSWORD=<gmail app password>
+ALERT_TO_EMAIL=<comma-separated recipients>
+ALERT_RUL_THRESHOLD_HOURS=200
+AUTO_ALERTS_ENABLED=false   # must be "true" to let the hourly auto-check fire emails
 ```
 
 **PostgreSQL Tables:**
@@ -56,6 +63,8 @@ GOOGLE_SERVICE_ACCOUNT_BASE64=<base64-encoded GCP service account JSON>
 - `bwts_iot_events` - Process lifecycle & alarm events
 - `bwts_iot_predictions` - ML predictions for UV lamp remaining useful life
 - `bwts_iot_voyage_schedule` - Voyage planning data (not used by dashboard UI)
+- `bwts_agent_investigations` - AI agent investigation records (alerts, root causes, email/report content) — see [Agent Log / Investigation Feature](#agent-log--investigation-feature)
+- `bwts_agent_phases` - Per-phase reasoning/timeline steps for each agent investigation
 
 ---
 
@@ -92,19 +101,25 @@ app/
 │   ├── events/            # GET /api/events
 │   ├── predictions/       # GET /api/predictions
 │   ├── stats/             # GET /api/stats (aggregated data)
+│   ├── alerts/             # Alert digest emailer (this repo's own, cooldown-based)
+│   ├── agent/investigations/ # Read-only viewer API for the external AI agent pipeline
+│   │   ├── route.ts       # GET /api/agent/investigations
+│   │   └── [id]/phases/   # GET /api/agent/investigations/[id]/phases
 │   └── debug/lamp-data/   # GET /api/debug/lamp-data (dev only)
 ├── globals.css            # Tailwind config + custom CSS variables
 ├── layout.tsx             # Root layout with DM Sans font
-└── page.tsx               # Main dashboard with tab navigation
+└── page.tsx               # Main dashboard with tab navigation (9 tabs)
 
 components/
-├── dashboards/            # 6 main dashboard views
+├── dashboards/            # 7 main dashboard views
 │   ├── FluidOverview.tsx           # Real-time monitoring (central lamp array)
 │   ├── PredictiveMaintenance.tsx   # Maintenance scheduling
 │   ├── TrendAnalysis.tsx           # Historical trends
 │   ├── ComplianceMonitoring.tsx    # IMO D-2 / USCG compliance
 │   ├── ComparativeAnalysis.tsx     # Lamp-to-lamp comparison
-│   └── DataExport.tsx              # CSV/PDF export
+│   ├── DataExport.tsx              # CSV/PDF export
+│   └── AgentInvestigations.tsx     # AI agent investigation log ("Agent Log" tab)
+├── LanguageSwitcher.tsx    # next-intl locale switcher (en/ja/ko/es/pt, BWTS_LOCALE cookie)
 └── ui/                    # shadcn/ui components
 
 lib/
@@ -315,6 +330,8 @@ GET /api/telemetry/chunked?startDate=2025-01-01&endDate=2026-01-15&offset=0&limi
 | `/api/events` | GET | Recent events (default: last 10) | Array of Event |
 | `/api/predictions` | GET | Current predictions for all components | Array of Prediction |
 | `/api/stats` | GET | Aggregated dashboard stats | Combined object |
+| `/api/agent/investigations` | GET | All AI agent investigations (read-only) | Array of Investigation rows from `bwts_agent_investigations` |
+| `/api/agent/investigations/[id]/phases` | GET | Reasoning phases for one investigation | Array of Phase rows from `bwts_agent_phases` |
 
 ### API Route Pattern
 
@@ -394,6 +411,53 @@ export default function DashboardName() {
 4. **ComplianceMonitoring** - IMO D-2/USCG compliance checklists, audit trail
 5. **ComparativeAnalysis** - Hourly lamp comparison (Lamp 1 vs 16 default), NO ROI data
 6. **DataExport** - Excel-style column filters, CSV/PDF export, progressive loading
+7. **AgentInvestigations ("🤖 Agent Log")** - Read-only log of AI agent investigations into correlated alerts, with email/report drawers and a phase-by-phase reasoning timeline. See [Agent Log / Investigation Feature](#agent-log--investigation-feature) below.
+
+---
+
+## Alert Email Safety Switch
+
+The app can automatically email an "agent team" inbox when it detects threshold breaches (see [Agent Log / Investigation Feature](#agent-log--investigation-feature) for what happens to those alerts downstream). Two independent trigger paths exist, and **both must be considered together** — fixing one does not stop the other:
+
+1. **Hourly auto-check** — `app/page.tsx` fires `GET /api/alerts/check` on every page mount (any visitor, including a client demo) and again every hour a tab stays open. Gated server-side in `app/api/alerts/check/route.ts` by the **`AUTO_ALERTS_ENABLED`** env var — the check returns `{skipped:true, reason:'auto_alerts_disabled'}` unless this is explicitly `"true"`. **Default is off/unset**, so demo/preview deployments never email on page load. Set `AUTO_ALERTS_ENABLED=true` only in the environment actually being monitored by the agent team (via `vercel env add AUTO_ALERTS_ENABLED production` + redeploy, or locally in `.env`).
+2. **Live Demo mode** — a client-side toggle (`lib/demo-context.tsx`, persisted in `localStorage['bwts-demo-mode']`) that simulates alerts and POSTs to `/api/alerts/demo`. Independent of the env var above, but respects the same pause switch (see below).
+
+**Manual pause switch** — `bwts_iot_events` rows of type `ALERT_EMAIL_PAUSED`/`ALERT_EMAIL_RESUMED`, toggled from the "Email Alerts" switch on the Alerts tab (`POST /api/alerts/settings`). Checked via the shared `isAlertsPaused()` helper in `lib/alerts.ts`, which **both** `app/api/alerts/check/route.ts` and `app/api/alerts/demo/route.ts` respect — so this one UI toggle reliably silences both paths regardless of the env var or Demo Mode state. Use this as the quick, no-deploy kill switch before showing the app to a client; use `AUTO_ALERTS_ENABLED` as the standing, deploy-time default so no one has to remember to flip the toggle.
+
+Alert data lives in `bwts_alert_instances` (not `bwts_iot_events`) — see columns and cleanup notes in the [Agent Log / Investigation Feature](#agent-log--investigation-feature) section. Note the agent team monitors an actual email inbox, not this table — clearing `bwts_alert_instances` does not un-send emails already delivered, and does not clear a backlog sitting in that inbox.
+
+---
+
+## Agent Log / Investigation Feature
+
+The **"🤖 Agent Log"** tab (`components/dashboards/AgentInvestigations.tsx`) is a **read-only viewer** for an external AI agent pipeline that is **not part of this codebase**. This app never generates investigations — it only displays whatever that separate pipeline writes into Postgres. It is distinct from `app/api/alerts/` + `lib/email.ts`, which is this repo's own simple hourly-cooldown alert-digest emailer.
+
+### What it shows
+
+A log of "Investigations" — batches of correlated telemetry alerts (e.g. multiple lamp/UV parameters going CRITICAL together) that the external agent has diagnosed. Each `InvestigationCard` shows vessel, urgency, severity pills, an "Email sent" badge, and a recurrence badge (🔁) linking to related prior investigations. Expanding a card reveals:
+
+- **Input** — the raw alerts that triggered the investigation (parameter, severity, current/threshold values, deviation %)
+- **Output** — two chips: **Email** (opens `EmailDrawer`, a simulated email-client view of `email_narrative`) and **Diagnostic Report** (opens `ReportDrawer`, an iframe rendering the `email_html_report` HTML column verbatim via a blob URL — rendered as-is, not reconstructed client-side)
+- **Agent Work** — a `PhaseTimeline` (fetched lazily on expand from `/api/agent/investigations/[id]/phases`) showing the agent's multi-phase reasoning: parallel Phase 1 data/manual/PMS/casefile lookups → Synthesis → Phase 2 remediation lookup → Report/delivery, each with a findings summary and optional "agent thinking" text
+
+### Data flow
+
+```
+External agent pipeline (outside this repo)
+  ↓ writes investigation + phase rows
+bwts_agent_investigations / bwts_agent_phases (Postgres)
+  ↓ SELECT ... via lib/db.ts query()
+/api/agent/investigations, /api/agent/investigations/[id]/phases
+  ↓ fetch()
+AgentInvestigations.tsx (read-only display)
+```
+
+### Key tables/columns
+
+- `bwts_agent_investigations` — `investigation_id`, `vessel_name`, `alert_ids`, `alerts_detail` (jsonb), `severities`, `status`, `urgency`, timestamps, `confirmed_causes`, `synthesis_summary`, `remediation_summary`, `casefile_summary`, `email_subject`, `email_narrative`, `email_html_report`, `email_sent_at`, `recurrence`
+- `bwts_agent_phases` — `investigation_id`, `phase`, `agent_name`, `status`, timing, `findings_summary`, `findings_detail`, `thinking`
+
+No migration/schema SQL for these tables exists in this repo — they're populated externally. If a query against them fails, check that the external pipeline has actually written rows, not this app's code.
 
 ---
 

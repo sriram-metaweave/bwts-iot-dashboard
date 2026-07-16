@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendAlertEmail } from '@/lib/email'
+import { isAlertsPaused } from '@/lib/alerts'
 
 const COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes per demo alert type
 
@@ -16,6 +17,12 @@ export async function POST(req: NextRequest) {
 
   if (!body.type || !body.severity) {
     return NextResponse.json({ ok: false, error: 'Missing type or severity' }, { status: 400 })
+  }
+
+  // Respect the same DB-backed pause switch as the hourly auto-check, so one
+  // toggle in the Alerts tab reliably silences both alert paths.
+  if (await isAlertsPaused()) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'paused' })
   }
 
   const { query: dbQuery, queryOne: dbQueryOne } = await import('@/lib/db')

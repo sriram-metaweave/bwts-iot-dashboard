@@ -2,17 +2,9 @@ import { NextResponse } from 'next/server'
 import { query, queryOne } from '@/lib/db'
 import { sendAlertEmail } from '@/lib/email'
 import { THRESHOLDS } from '@/lib/constants'
+import { isAlertsPaused } from '@/lib/alerts'
 
 const COOLDOWN_MS = 60 * 60 * 1000 // 1 hour
-
-async function isAlertsPaused(): Promise<boolean> {
-  const row = await queryOne<{ eventType: string }>(
-    `SELECT "eventType" FROM bwts_iot_events
-     WHERE "eventType" IN ('ALERT_EMAIL_PAUSED', 'ALERT_EMAIL_RESUMED')
-     ORDER BY timestamp DESC LIMIT 1`
-  )
-  return row?.eventType === 'ALERT_EMAIL_PAUSED'
-}
 
 // PostgreSQL-backed cooldown — survives serverless cold starts
 async function isCoolingDown(): Promise<boolean> {
@@ -59,6 +51,12 @@ interface AlertItem {
 }
 
 export async function GET() {
+  // Default-off safety net: the hourly auto-check only runs when explicitly
+  // enabled for a real monitored deployment. Demo/preview deployments should
+  // leave this unset so opening the app never triggers alert emails.
+  if (process.env.AUTO_ALERTS_ENABLED !== 'true') {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'auto_alerts_disabled' })
+  }
   if (await isAlertsPaused()) {
     return NextResponse.json({ ok: true, skipped: true, reason: 'paused' })
   }
